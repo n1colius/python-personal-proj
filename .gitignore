@@ -1,4 +1,28 @@
-#.gitignore
-/*/Include/*
-/*/Lib/*
-/*/Scripts/*
+# Virtual environments
+venv/
+.venv/
+env/
+*/Include/
+*/Lib/
+*/Scripts/
+*/bin/
+*/lib/
+*/lib64/
+pyvenv.cfg
+
+# Secrets
+.env
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Distribution / build
+dist/
+build/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
