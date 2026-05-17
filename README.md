@@ -6,33 +6,26 @@
 |------|-------------|
 | [saham_idx](saham_idx/) | Scraper data saham IDX → MySQL via SSH tunnel |
 
-## Requirements (Ubuntu/Linux)
+## Requirements
 
-Make sure Python 3 and `pip` are installed:
+Install [uv](https://docs.astral.sh/uv/) (manages Python versions + dependencies):
 
 ```bash
-sudo apt update
-sudo apt install python3 python3-pip python3-venv
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ## Usage
 
-Each tool is self-contained in its own folder. Navigate into the tool directory, install dependencies, set up `.env`, then run.
+Each tool is a self-contained uv project. Navigate into the tool directory, sync deps, set up `.env`, then run.
 
 ```bash
 cd <tool_name>
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env       # fill in your credentials
-python3 main.py
+uv sync                    # creates .venv and installs deps
+uv run main.py
 ```
 
-To deactivate the virtual environment when done:
-
-```bash
-deactivate
-```
+`uv sync` creates a local `.venv/` automatically — no manual venv activation needed.
 
 ## Contact
 

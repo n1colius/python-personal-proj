@@ -1,58 +1,61 @@
 import os
+import re
+import subprocess
 import time
 import json
-import sys
 from datetime import datetime
 
+CHROME_PATH = "/usr/bin/google-chrome"
+
+def detect_chrome_major_version(chrome_path: str) -> int:
+    output = subprocess.check_output([chrome_path, "--version"], text=True)
+    match = re.search(r"(\d+)\.", output)
+    if not match:
+        raise RuntimeError(f"Could not parse Chrome version from: {output!r}")
+    return int(match.group(1))
+
 from dotenv import load_dotenv
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-import sshtunnel
+import undetected_chromedriver as uc
 import mysql.connector
 
 load_dotenv()
 
-ssh_host = os.environ["SSH_HOST"]
-ssh_port = int(os.environ["SSH_PORT"])
-ssh_username = os.environ["SSH_USERNAME"]
-ssh_password = os.environ["SSH_PASSWORD"]
-
 db_host = os.environ["DB_HOST"]
+db_port = int(os.environ.get("DB_PORT", 3306))
 db_user = os.environ["DB_USER"]
 db_password = os.environ["DB_PASSWORD"]
 db_name = os.environ["DB_NAME"]
 
-with sshtunnel.SSHTunnelForwarder(
-    (ssh_host, ssh_port),
-    ssh_username=ssh_username,
-    ssh_password=ssh_password,
-    remote_bind_address=(db_host, 3306),
-    allow_agent=False
-) as tunnel:
-    tunnel.start()
+conn = mysql.connector.connect(
+    host=db_host,
+    port=db_port,
+    user=db_user,
+    password=db_password,
+    database=db_name,
+    use_pure=True,
+)
+cursor = conn.cursor()
+cursor.execute("SET SESSION sql_mode = ''")
 
-    conn = mysql.connector.connect(
-        host="localhost",
-        user=db_user,
-        password=db_password,
-        database=db_name,
-        port=tunnel.local_bind_port,
-        use_pure=True
-    )
-    cursor = conn.cursor()
+cursor.execute("SELECT EmitCode, ScrapDay FROM saham_scrap_setting WHERE Status='active'")
+settings = cursor.fetchall()
 
-    cursor.execute("SELECT EmitmenCode, ScrapDay FROM scrap_saham_setting WHERE Status='active'")
-    settings = cursor.fetchall()
+options = uc.ChromeOptions()
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+driver = uc.Chrome(
+    options=options,
+    headless=False,
+    browser_executable_path=CHROME_PATH,
+    version_main=detect_chrome_major_version(CHROME_PATH),
+)
 
-    service = Service()
-    options = webdriver.ChromeOptions()
-    driver = webdriver.Chrome(service=service, options=options)
-
-    for emitmen_code, scrap_day in settings:
+try:
+    for EmitCode, ScrapDay in settings:
         url = (
             f"https://idx.co.id/primary/ListedCompany/GetTradingInfoSS"
-            f"?code={emitmen_code}&start=0&length={scrap_day}"
+            f"?code={EmitCode}&start=0&length={ScrapDay}"
         )
         driver.get(url)
 
@@ -61,29 +64,35 @@ with sshtunnel.SSHTunnelForwarder(
 
         for row in data["replies"]:
             date = datetime.strptime(row["Date"], "%Y-%m-%dT%H:%M:%S").strftime("%Y-%m-%d")
+            delisting_date = row["DelistingDate"] or "0000-00-00"
             values = (
                 row["StockCode"], date,
-                row["Previous"], row["Close"], row["High"], row["Low"],
-                row["ListedShares"], row["BidVolume"], row["OfferVolume"], row["Change"],
+                row["Previous"], row["OpenPrice"], row["FirstTrade"],
+                row["High"], row["Low"], row["Close"], row["Change"],
                 row["Volume"], row["Value"], row["Frequency"], row["IndexIndividual"],
-                row["Offer"], row["Bid"],
-                row["ForeignSell"], row["ForeignBuy"],
+                row["Offer"], row["OfferVolume"], row["Bid"], row["BidVolume"],
+                row["ListedShares"], row["TradebleShares"], row["WeightForIndex"],
+                row["ForeignSell"], row["ForeignBuy"], delisting_date,
                 row["NonRegularVolume"], row["NonRegularValue"], row["NonRegularFrequency"],
             )
             cursor.execute("""
                 INSERT IGNORE INTO saham_historical
-                    (EmitCode, `Date`, PriceOpen, PriceClosed, PriceHigh, PriceLow,
-                     ListedShares, BidVolume, OfferVolume, `Change`, Volume, `Value`,
-                     Frequency, IndexIndividual, Offer, Bid,
-                     ForeignSell, ForeignBuy,
-                     NonRegularVolume, NonRegularValue, NonRegularFrequency, DateGenerated)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
+                    (EmitCode, `Date`,
+                     `Previous`, OpenPrice, FirstTrade,
+                     High, Low, `Close`, `Change`,
+                     Volume, `Value`, Frequency, IndexIndividual,
+                     Offer, OfferVolume, Bid, BidVolume,
+                     ListedShares, TradebleShares, WeightForIndex,
+                     ForeignSell, ForeignBuy, DelistingDate,
+                     NonRegularVolume, NonRegularValue, NonRegularFrequency,
+                     DateGenerated)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,NOW())
             """, values)
-            conn.commit()
+        conn.commit()
 
-        print(f"Finish Scrap for {emitmen_code}")
+        print(f"Finish Scrap for {EmitCode}")
         time.sleep(3)
-
+finally:
     driver.quit()
     cursor.close()
     conn.close()

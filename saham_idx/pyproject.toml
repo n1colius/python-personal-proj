@@ -1,0 +1,13 @@
+[project]
+name = "saham-idx"
+version = "0.1.0"
+description = "Scraper data saham IDX → MySQL"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "selenium",
+    "undetected-chromedriver",
+    "mysql-connector-python",
+    "python-dotenv",
+    "setuptools>=82.0.1",
+]

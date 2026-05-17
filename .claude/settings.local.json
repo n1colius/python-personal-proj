@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv --version)",
+      "Bash(rm \"/home/nikolius/codework/python-personal-proj/saham_idx/requirements.txt\")"
+    ]
+  }
+}

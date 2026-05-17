@@ -1,4 +1,0 @@
-selenium
-sshtunnel
-mysql-connector-python
-python-dotenv
